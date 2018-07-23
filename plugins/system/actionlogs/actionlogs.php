@@ -123,6 +123,49 @@ class PlgSystemActionLogs extends JPlugin
 	}
 
 	/**
+	 * Runs on content preparation
+	 *
+	 * @param   string  $context  The context for the data
+	 * @param   object  $data     An object containing the data for the form.
+	 *
+	 * @return  boolean
+	 *
+	 * @since   __DEPLOY_VERSION__
+	 */
+	public function onContentPrepareData($context, $data)
+	{
+		if (!in_array($context, array('com_users.profile','com_admin.profile', 'com_users.user')))
+		{
+			return true;
+		}
+
+		if (is_array($data))
+		{
+			$data = (object) $data;
+		}
+
+		$value = 0;
+
+		$query = $this->db->getQuery(true)
+			->select($this->db->quoteName('logs_notification_option'))
+			->from($this->db->quoteName('#__action_logs_notification'))
+			->where($this->db->quoteName('user_id') . ' = ' . (int) $data->id);
+
+		try
+		{
+			$value = $this->db->setQuery($query)->loadResult();
+		}
+		catch (JDatabaseExceptionExecuting $e)
+		{
+			return false;
+		}
+
+		$data->logs_notification_option = $value;
+
+		return true;
+	}
+
+	/**
 	 * Runs after the HTTP response has been sent to the client and delete log records older than certain days
 	 *
 	 * @return  void
@@ -224,6 +267,116 @@ class PlgSystemActionLogs extends JPlugin
 				return;
 			}
 		}
+	}
+
+	/**
+	 * Utility method to act on a user after it has been saved.
+	 *
+	 * @param   array    $user     Holds the new user data.
+	 * @param   boolean  $isNew    True if a new user is stored.
+	 * @param   boolean  $success  True if user was successfully stored in the database.
+	 * @param   string   $msg      Message.
+	 *
+	 * @return  void
+	 *
+	 * @since   __DEPLOY_VERSION__
+	 */
+	public function onUserAfterSave($user, $isNew, $success, $msg)
+	{
+		if ($isNew || empty($user['id']))
+		{
+			return;
+		}
+
+		$exists = false;
+
+		$query = $this->db->getQuery(true)
+			->select('COUNT(*)')
+			->from($this->db->quoteName('#__action_logs_notification'))
+			->where($this->db->quoteName('user_id') . ' = ' . (int) $user['id']);
+
+		try
+		{
+			$exists = $this->db->setQuery($query)->loadResult();
+		}
+		catch (JDatabaseExceptionExecuting $e)
+		{
+			return false;
+		}
+
+		// If preferences don't exist, insert.
+		if (!$exists)
+		{
+			$query = $this->db->getQuery(true)
+				->insert($this->db->quoteName('#__action_logs_notification'))
+				->columns($this->db->quoteName(array('user_id', 'logs_notification_option')))
+				->values((int) $user['id'] . ',' . (int) $user['logs_notification_option']);
+		}
+		else
+		{
+			// Remove preferences if user is not authorised.
+			if (!JUser::getInstance($data['id'])->authorise('core.admin'))
+			{
+				$query = $this->db->getQuery(true)
+					->delete($this->db->quoteName('#__action_logs_notification'))
+					->where($this->db->quoteName('user_id') . ' = ' . (int) $user['id']);
+			}
+			else
+			{
+				// Update preferences.
+				$query = $this->db->getQuery(true)
+					->update($this->db->quoteName('#__action_logs_notification'))
+					->set($this->db->quoteName('logs_notification_option') . ' = ' . (int) $user['logs_notification_option'])
+					->where($this->db->quoteName('user_id') . ' = ' . (int) $user['id']);
+			}
+		}
+
+		try
+		{
+			$this->db->setQuery($query)->execute();
+		}
+		catch (JDatabaseExceptionExecuting $e)
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Remove all sessions for the user name
+	 *
+	 * Method is called after user data is deleted from the database
+	 *
+	 * @param   array    $user     Holds the user data
+	 * @param   boolean  $success  True if user was successfully stored in the database
+	 * @param   string   $msg      Message
+	 *
+	 * @return  boolean
+	 *
+	 * @since   __DEPLOY_VERSION__
+	 */
+	public function onUserAfterDelete($user, $success, $msg)
+	{
+		if (!$success)
+		{
+			return false;
+		}
+
+		$query = $this->db->getQuery(true)
+			->delete($this->db->quoteName('#__action_logs_notification'))
+			->where($this->db->quoteName('user_id') . ' = ' . (int) $user['id']);
+
+		try
+		{
+			$this->db->setQuery($query)->execute();
+		}
+		catch (JDatabaseExceptionExecuting $e)
+		{
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
