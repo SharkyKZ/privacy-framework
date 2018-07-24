@@ -134,7 +134,7 @@ class PlgSystemActionLogs extends JPlugin
 	 */
 	public function onContentPrepareData($context, $data)
 	{
-		if (!in_array($context, array('com_users.profile','com_admin.profile', 'com_users.user')))
+		if (!in_array($context, array('com_users.profile', 'com_admin.profile', 'com_users.user')))
 		{
 			return true;
 		}
@@ -142,6 +142,11 @@ class PlgSystemActionLogs extends JPlugin
 		if (is_array($data))
 		{
 			$data = (object) $data;
+		}
+		
+		if (!JUser::getInstance($data->id)->authorise('core.admin'))
+		{
+			return true;
 		}
 
 		$value = 0;
@@ -304,7 +309,7 @@ class PlgSystemActionLogs extends JPlugin
 			return false;
 		}
 
-		// If preferences don't exist, insert.
+		// Insert preferences.
 		if (!$exists)
 		{
 			$query = $this->db->getQuery(true)
@@ -315,7 +320,7 @@ class PlgSystemActionLogs extends JPlugin
 		else
 		{
 			// Remove preferences if user is not authorised.
-			if (!JUser::getInstance($data['id'])->authorise('core.admin'))
+			if (!JUser::getInstance($user['id'])->authorise('core.admin'))
 			{
 				$query = $this->db->getQuery(true)
 					->delete($this->db->quoteName('#__action_logs_notification'))
@@ -395,13 +400,13 @@ class PlgSystemActionLogs extends JPlugin
 
 		foreach ($clearGroups as $group)
 		{
-			foreach ($cacheClients as $client_id)
+			foreach ($cacheClients as $clientId)
 			{
 				try
 				{
 					$options = array(
 						'defaultgroup' => $group,
-						'cachebase'    => $client_id ? JPATH_ADMINISTRATOR . '/cache' :
+						'cachebase'    => $clientId ? JPATH_ADMINISTRATOR . '/cache' :
 							$conf->get('cache_path', JPATH_SITE . '/cache')
 					);
 
